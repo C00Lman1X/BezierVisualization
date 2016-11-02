@@ -1,111 +1,140 @@
+if Point == nil then
+	Point = require("Point")
+end
 local Bezier = {}
 
-function Bezier:new(points_count, points_table)
-  newObj = {}
-  for i = 1,points_count do
-    p = { x = points_table[i*2-1], y = points_table[i*2-1+1]}
-    newObj['P'..i-1] = p
-  end
+function Bezier:new(points)
+	newObj = {}
+	newObj.points = points
+	points_table = {}
+	for i, p in pairs(points) do
+		table.insert(points_table, p.x)
+		table.insert(points_table, p.y)
+	end
 
-  newObj.count = points_count
-  newObj.curve = love.math.newBezierCurve(points_table)
-  newObj.t = 0.0
-  newObj.cpt = ''
-  
-  self.__index = self
-  return setmetatable(newObj, self)
+	newObj.t = 0.0
+	newObj.cpt = 0
+	newObj.levels = {}
+	
+	self.__index = self
+	setmetatable(newObj, self)
+	newObj:refresh()
+	return newObj
 end
 
 function Bezier:draw()
-  r, g, b, a = love.graphics.getColor()
+	r, g, b, a = love.graphics.getColor()
 
-  local P0, P1, P2, P3, P4, t = self.P0, self.P1, self.P2, self.P3, self.P4, self.t
+	love.graphics.setColor(0, 0, 0, 128)
+	for i = 1,#self.points do
+		local p = self.points[i]
+		love.graphics.circle('fill', p.x, p.y, 3)
+		if i>1 then
+			local prev = self.points[i-1]
+			love.graphics.line(prev.x, prev.y, p.x, p.y)
+		end
+	end
 
-  love.graphics.setColor(0, 0, 0, 128)
-  for i = 1, self.count do
-    love.graphics.circle('fill', self['P'..i-1].x, self['P'..i-1].y, 3)
-    if i>1 then
-      love.graphics.line(self['P'..i-1].x, self['P'..i-1].y, self['P'..i-2].x, self['P'..i-2].y)
-    end
-  end
+	levels = self.levels
+	for lvl = 2,#levels do
+		love.graphics.setColor(70+30*lvl, 0, 0, 255)
+		for i = 1, #levels[lvl] do
+			local p = levels[lvl][i]
+			love.graphics.circle('fill', p.x, p.y, 3)
+			if i > 1 then
+				local prev = levels[lvl][i-1]
+	love.graphics.line(prev.x, prev.y, p.x, p.y)
+			end
+		end
+	end
 
-  local Q0, Q1, Q2, Q3, Q4
-  local R0, R1, R2
-  local S0, S1
+	love.graphics.setColor(255, 0, 0, 255)
+	love.graphics.line(self.curve:render(5))
 
-  if self.count >= 3 then
-    love.graphics.setColor(0, 255, 0, 255)
+	love.graphics.setColor(0, 0, 0, 255)
+	tx, ty = self.curve:evaluate(self.t)
+	love.graphics.circle('fill', tx, ty, 3)
 
-    Q0 = { x = P0.x+(P1.x-P0.x)*t, y = P0.y+(P1.y-P0.y)*t}
-    Q1 = { x = P1.x+(P2.x-P1.x)*t, y = P1.y+(P2.y-P1.y)*t}
-    love.graphics.line(Q0.x, Q0.y, Q1.x, Q1.y)
-    love.graphics.circle('fill', Q0.x, Q0.y, 3)
-    love.graphics.circle('fill', Q1.x, Q1.y, 3)
-  end
-  if self.count >= 4 then
-    Q2 = { x = P2.x+(P3.x-P2.x)*t, y = P2.y+(P3.y-P2.y)*t}
-    love.graphics.line(Q1.x, Q1.y, Q2.x, Q2.y)
-    love.graphics.circle('fill', Q1.x, Q1.y, 3)
-    R0 = { x = Q0.x+(Q1.x-Q0.x)*t, y = Q0.y+(Q1.y-Q0.y)*t}
-    R1 = { x = Q1.x+(Q2.x-Q1.x)*t, y = Q1.y+(Q2.y-Q1.y)*t}
-    love.graphics.setColor(0, 0, 255, 255)
-    love.graphics.line(R0.x, R0.y, R1.x, R1.y)
-    love.graphics.circle('fill', R0.x, R0.y, 3)
-    love.graphics.circle('fill', R1.x, R1.y, 3)
-  end
+	mx, my = love.mouse.getPosition()
+	for i = 1, #self.points do
+		if self:isNear(mx, my, self.points[i]) then
+			love.graphics.circle('line', self.points[i].x, self.points[i].y, 5)
+		end
+	end
 
-  love.graphics.setColor(255, 0, 0, 255)
-  love.graphics.line(self.curve:render(5))
-
-  love.graphics.setColor(0, 0, 0, 255)
-  tx, ty = self.curve:evaluate(t)
-  love.graphics.circle('fill', tx, ty, 3)
-
-  mx, my = love.mouse.getPosition()
-  if self:isNear(mx,my, P0) then
-    love.graphics.circle('line', P0.x, P0.y, 5)
-  elseif P1 and self:isNear(mx,my, P1) then
-    love.graphics.circle('line', P1.x, P1.y, 5)
-  elseif P2 and self:isNear(mx,my, P2) then
-    love.graphics.circle('line', P2.x, P2.y, 5)
-  elseif P3 and self:isNear(mx,my, P3) then
-    love.graphics.circle('line', P3.x, P3.y, 5)
-  end
-
-  love.graphics.setColor(r, g, b, a)
+	love.graphics.setColor(r, g, b, a)
 end
 
 function dist(x1,y1,x2,y2)
-  return math.sqrt((x1-x2)*(x1-x2)+(y1-y2)*(y1-y2))
+	return math.sqrt((x1-x2)*(x1-x2)+(y1-y2)*(y1-y2))
+end
+
+function Bezier:generateLevels()
+	local t = self.t
+	local levels = {self.points}
+
+	for i = 2,#self.points do
+		table.insert(levels, {})
+		for l = 2, #levels do
+			local newPoint = {}
+			local prevP1, prevP2 = levels[l-1][i-(l-2)-1],levels[l-1][i-(l-2)]
+			newPoint.x = prevP1.x + (prevP2.x-prevP1.x)*t
+			newPoint.y = prevP1.y + (prevP2.y-prevP1.y)*t
+			table.insert(levels[l], newPoint)
+		end
+	end
+	self.levels = levels
 end
 
 function Bezier:isNear(x,y,p)
-  if dist(x, y, p.x, p.y) <= 5 then
-    return true
-  end
-  return false
+	if dist(x, y, p.x, p.y) <= 5 then
+		return true
+	end
+	return false
 end
 
 function Bezier:checkMouse(x,y)
-  for i = 1,self.count do
-    if self:isNear(x,y, self['P'..i-1]) then
-      self.cpt = 'P'..i-1
-      print(self.cpt)
-      break
-    end
-  end
+	for i,p in pairs(self.points) do
+		if self:isNear(x,y, p) then
+			self.cpt = i
+			break
+		end
+	end
 end
 
 function Bezier:move(x,y)
-  self[self.cpt].x = x
-  self[self.cpt].y = y
-  local points = {}
-  for i = 1,self.count do
-    table.insert(points, self['P'..i-1].x)
-    table.insert(points, self['P'..i-1].y)
-  end
-  self.curve = love.math.newBezierCurve(points)
+	self.points[self.cpt].x = x
+	self.points[self.cpt].y = y
+	self:refresh()
+end
 
+function Bezier:refresh()
+	local points = {}
+	for i,p in pairs(self.points) do
+		table.insert(points, p.x)
+		table.insert(points, p.y)
+	end
+	self.curve = love.math.newBezierCurve(points)
+	self:generateLevels()
+end
+
+function Bezier:addPoint()
+	local vx = self.points[#self.points].x - self.points[#self.points-1].x
+	local vy = self.points[#self.points].y - self.points[#self.points-1].y
+	local vec = Point:new(vx,vy)
+	vec:vecNormalize()
+	vec:vecRotate90()
+	local newP = vec:vecGetPoint(self.points[#self.points].x, self.points[#self.points].y, 200)
+	table.insert(self.points, {x=newP.x, y=newP.y})
+	self:refresh()
+end
+
+function Bezier:delPoint()
+	if #self.points	< 3 then
+		return
+	end
+	self.points[#self.points] = nil
+	self:refresh()
 end
 
 return Bezier
